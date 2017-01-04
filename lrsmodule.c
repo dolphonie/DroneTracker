@@ -6,13 +6,13 @@
 
 #define DEBUG_PRINT 0
 
-const int16_t IMG_WIDTH = 640;
-const int16_t IMG_HEIGHT = 480;
-
 rs_context * ctx;
 rs_device * dev;
-float depth_scale;
+uint16_t one_meter;
 rs_error * e = 0;
+rs_intrinsics depth_intrin, color_intrin;
+rs_extrinsics depth_to_color;
+
 
 int check_error(void)
 {
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
 
 
 static PyObject *
-lrs_startDepth(PyObject *self, PyObject* args)
+lrs_startStream(PyObject *self, PyObject* args)
 {
     import_array();//Starts numpy C-API
 
@@ -112,21 +112,31 @@ lrs_startDepth(PyObject *self, PyObject* args)
     if (check_error()) return NULL;
 
     /* Configure depth to run at VGA resolution at 30 frames per second */
-    rs_enable_stream(dev, RS_STREAM_DEPTH, 640, 480, RS_FORMAT_Z16, 30, &e);
+    rs_enable_stream_preset(dev, RS_STREAM_DEPTH, RS_PRESET_BEST_QUALITY, &e);
     if (check_error()) return NULL;
+    rs_enable_stream_preset(dev, RS_STREAM_COLOR, RS_PRESET_BEST_QUALITY, &e);
+    if (check_error()) return NULL;
+    
     rs_start_device(dev, &e);
     if (check_error()) return NULL;
 
     /*depth_scale = rs_get_device_depth_scale(dev, &e);
     if (check_error()) return NULL;*/
 
-    const uint16_t one_meter = (uint16_t)(1.0f / rs_get_device_depth_scale(dev, &e));
+    rs_get_stream_intrinsics(dev, RS_STREAM_DEPTH, &depth_intrin, &e);
+    if (check_error()) return NULL;
+    rs_get_device_extrinsics(dev, RS_STREAM_DEPTH, RS_STREAM_COLOR, &depth_to_color, &e);
+    if (check_error()) return NULL;
+    rs_get_stream_intrinsics(dev, RS_STREAM_COLOR, &color_intrin, &e);
+    if (check_error()) return NULL;
+
+    one_meter = (uint16_t)(1.0f / rs_get_device_depth_scale(dev, &e));
 
     return Py_BuildValue("i", one_meter);
 }
 
 static PyObject *
-lrs_stopDepth(PyObject *self, PyObject* args)
+lrs_stopStream(PyObject *self, PyObject* args)
 {
     rs_stop_device(dev, &e);
     if (check_error()) return NULL;
@@ -139,11 +149,13 @@ lrs_getFrame(PyObject *self, PyObject* args)
 {
     rs_wait_for_frames(dev, &e);
     /* Retrieve depth data, which was previously configured as a 640 x 480 image of 16-bit depth values */
-    uint16_t * framePointer = (uint16_t *)(rs_get_frame_data(dev, RS_STREAM_DEPTH, &e));
+    uint16_t * depthPointer = (uint16_t *)(rs_get_frame_data(dev, RS_STREAM_DEPTH, &e));
+    if (check_error()) return NULL;
+    uint16_t*  colorPointer = (uint16_t *)(rs_get_frame_data(dev, RS_STREAM_COLOR_ALIGNED_TO_DEPTH, &e));
     if (check_error()) return NULL;
 
     if (DEBUG_PRINT) {
-	   uint16_t* fPCopy = framePointer;
+	   uint16_t* fPCopy = depthPointer;
 	   int  numNonZero = 0;
 	   for (int i = 0; i < 640 * 480; i++) {
 		  int pixel = *fPCopy++;
@@ -154,18 +166,21 @@ lrs_getFrame(PyObject *self, PyObject* args)
 	   printf("Number of nonzero pixels in frame: %d\n", numNonZero);
     }
 
-    int imgDims[2] = {IMG_HEIGHT, IMG_WIDTH};
-    PyArrayObject* depthFrame =   PyArray_SimpleNewFromData(2, imgDims, NPY_UINT16, (void*) framePointer);
-    return PyArray_Return(depthFrame);
+    int depthDims[2] = { depth_intrin.height, depth_intrin.width };
+    PyArrayObject* depthFrame =   PyArray_SimpleNewFromData(2, depthDims, NPY_UINT16, (void*) depthPointer);
+
+    int colorDims[3] = {depth_intrin.height, depth_intrin.width, 3};
+    PyArrayObject* colorFrame = PyArray_SimpleNewFromData(3, colorDims, NPY_UINT8, (void*)colorPointer);
+    return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
 }
 
 
 static PyMethodDef lrs_methods[] = {
     { "getFrame", lrs_getFrame, METH_NOARGS,
     "get Intel Realsense Frame from R200" },
-    {"startDepth", lrs_startDepth, METH_NOARGS,
+    {"startStream", lrs_startStream, METH_NOARGS,
     "Initialize RealSense camera. Returns 1 if success, NULL if failure" },
-    {"stopDepth", lrs_stopDepth, METH_NOARGS,
+    {"stopStream", lrs_stopStream, METH_NOARGS,
     "Stop RealSense camera. Returns 1 if success, NULL if failure. DEVICE NEEDS REBOOT AFTER"},
     { NULL,              NULL }           /* sentinel */
 };
