@@ -3,12 +3,13 @@
 #include "Python.h"
 #include <numpy/arrayobject.h>
 #include <librealsense/rs.h>
+#include <librealsense/rsutil.h>
 
-#define DEBUG_PRINT 0
+#define DEBUG_PRINT 1
 
 rs_context * ctx;
 rs_device * dev;
-uint16_t one_meter;
+float depth_scale;
 rs_error * e = 0;
 rs_intrinsics depth_intrin, color_intrin;
 rs_extrinsics depth_to_color;
@@ -38,49 +39,7 @@ void initlrs(void); /* Forward */
 
 int main(int argc, char **argv)
 {
-    /* Pass argv[0] to the Python interpreter */
-    Py_SetProgramName(argv[0]);
-
-    /* Initialize the Python interpreter.  Required. */
-    Py_Initialize();
-
-    /* Add a static module */
-    initlrs();
-
-    /* Define sys.argv.  It is up to the application if you
-    want this; you can also leave it undefined (since the Python
-    code is generally not a main program it has no business
-    touching sys.argv...)
-
-    If the third argument is true, sys.path is modified to include
-    either the directory containing the script named by argv[0], or
-    the current working directory.  This can be risky; if you run
-    an application embedding Python in a directory controlled by
-    someone else, attackers could put a Trojan-horse module in the
-    directory (say, a file named os.py) that your application would
-    then import and run.
-    */
-    PySys_SetArgvEx(argc, argv, 0);
-
-    /* Do some application specific code */
-    printf("Hello, brave new world\n\n");
-
-    /* Execute some Python statements (in module __main__) */
-    PyRun_SimpleString("import sys\n");
-    PyRun_SimpleString("print sys.builtin_module_names\n");
-    PyRun_SimpleString("print sys.modules.keys()\n");
-    PyRun_SimpleString("print sys.executable\n");
-    PyRun_SimpleString("print sys.argv\n");
-
-    /* Note that you can call any public function of the Python
-    interpreter here, e.g. call_object(). */
-
-    /* Some more application specific code */
-    printf("\nGoodbye, cruel world\n");
-
-    /* Exit, cleaning up the interpreter */
-    Py_Exit(0);
-    /*NOTREACHED*/
+    
 }
 
 /* A static module */
@@ -130,9 +89,10 @@ lrs_startStream(PyObject *self, PyObject* args)
     rs_get_stream_intrinsics(dev, RS_STREAM_COLOR, &color_intrin, &e);
     if (check_error()) return NULL;
 
-    one_meter = (uint16_t)(1.0f / rs_get_device_depth_scale(dev, &e));
+    depth_scale = rs_get_device_depth_scale(dev, &e);
+    if (check_error()) return NULL;
 
-    return Py_BuildValue("i", one_meter);
+    return Py_BuildValue("f", depth_scale);
 }
 
 static PyObject *
@@ -143,7 +103,7 @@ lrs_stopStream(PyObject *self, PyObject* args)
     return Py_BuildValue("i", 1);
 }
 
-/* 'self' is not used */
+//Returns (depth frame as Numpy Array, color frame as Numpy Array)
 static PyObject *
 lrs_getFrame(PyObject *self, PyObject* args)
 {
@@ -151,27 +111,65 @@ lrs_getFrame(PyObject *self, PyObject* args)
     /* Retrieve depth data, which was previously configured as a 640 x 480 image of 16-bit depth values */
     uint16_t * depthPointer = (uint16_t *)(rs_get_frame_data(dev, RS_STREAM_DEPTH, &e));
     if (check_error()) return NULL;
+
+    //Get color data
     uint16_t*  colorPointer = (uint16_t *)(rs_get_frame_data(dev, RS_STREAM_COLOR_ALIGNED_TO_DEPTH, &e));
     if (check_error()) return NULL;
 
-    if (DEBUG_PRINT) {
-	   uint16_t* fPCopy = depthPointer;
-	   int  numNonZero = 0;
-	   for (int i = 0; i < 640 * 480; i++) {
-		  int pixel = *fPCopy++;
-		  if (pixel != 0) {
-			 numNonZero++;
-		  }
+    uint16_t* dCopy = depthPointer;
+    int  numNonZero = 0;
+    for (int i = 0; i < depth_intrin.width * depth_intrin.height; i++) {
+	   int pixel = *dCopy++;
+	   if (pixel != 0) {
+		  numNonZero++;
 	   }
-	   printf("Number of nonzero pixels in frame: %d\n", numNonZero);
+    }
+    if(DEBUG_PRINT)  printf("Number of nonzero pixels in frame: %d\n", numNonZero);
+
+    float pointCloud[numNonZero][3];
+    dCopy = depthPointer;
+    //Generate point cloud
+    int dx, dy;
+    int index = 0;
+    for (dy = 0; dy < depth_intrin.height; ++dy)
+    {
+	   for (dx = 0; dx < depth_intrin.width; ++dx)
+	   {
+		  /* Retrieve the 16-bit depth value and map it into a depth in meters */
+		  uint16_t depth_value = dCopy[dy * depth_intrin.width + dx];
+		  float depth_in_meters = depth_value * depth_scale;
+
+		  /* Skip over pixels with a depth value of zero, which is used to indicate no data */
+		  if (depth_value == 0) continue;
+
+		  /* Map from pixel coordinates in the depth image to pixel coordinates in the color image */
+		  float depth_pixel[2] = { (float)dx, (float)dy };
+		  float depth_point[3];// , color_point[3], color_pixel[2];//Maybe later
+		  rs_deproject_pixel_to_point(depth_point, &depth_intrin, depth_pixel, depth_in_meters);
+		  
+		  
+		  //Patrick code: Subject to RUD
+		  for (int i = 0; i < 3; i++) {
+			 pointCloud[index][i] = depth_point[i];
+		  }
+		  index++;
+	   }
     }
 
+    if (DEBUG_PRINT)  printf("Populated frame\n");
+
+
+    int pcDims[2] = { numNonZero, 3 };
+    PyArrayObject* pointCloudNP = PyArray_SimpleNewFromData(2, pcDims, NPY_FLOAT32, (void*)&pointCloud);
+    
+    //Pack depth and color data into Numpy arrays
     int depthDims[2] = { depth_intrin.height, depth_intrin.width };
     PyArrayObject* depthFrame =   PyArray_SimpleNewFromData(2, depthDims, NPY_UINT16, (void*) depthPointer);
 
     int colorDims[3] = {depth_intrin.height, depth_intrin.width, 3};
     PyArrayObject* colorFrame = PyArray_SimpleNewFromData(3, colorDims, NPY_UINT8, (void*)colorPointer);
-    return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
+    return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
+    //return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
 }
 
 

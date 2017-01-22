@@ -14,7 +14,11 @@ print lrs.startStream()
 #    lrs.getFrame()
 #    time.sleep(2)
 
-#np.savetxt("img.txt", lrs.getFrame(), fmt="%d")
+
+for i in range(10):
+    lrs.getFrame()
+
+np.savetxt("img.txt", lrs.getFrame()[2], fmt="%f")
 
 
 cv2.namedWindow('depth', cv2.WINDOW_NORMAL)
