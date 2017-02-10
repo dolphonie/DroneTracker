@@ -3,10 +3,10 @@ from distutils.core import setup, Extension
 #include_dirs=['/home/odroid/realsense/Maghoumi/include/librealsense'], //Maybe needed for libs
 
 module1 = Extension('lrs',
-                    include_dirs=['/usr/local/include/librealsense'],
+                    include_dirs=['/usr/local/include/librealsense','/usr/include/boost'],
                     runtime_library_dirs = ['/usr/local/lib'],
                     libraries = ['realsense'],
-                    sources = ['lrsmodule.c'])
+                    sources = ['lrsmodule.c','segmenter.cpp'])
 
 setup (name = 'lrsPackage',
        version = '1.0',

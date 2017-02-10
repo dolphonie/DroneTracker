@@ -24,6 +24,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="DroneTracker.py" />
+    <Compile Include="setup.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="lrsmodule.c" />

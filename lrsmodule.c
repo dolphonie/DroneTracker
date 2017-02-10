@@ -14,6 +14,7 @@ rs_error * e = 0;
 rs_intrinsics depth_intrin, color_intrin;
 rs_extrinsics depth_to_color;
 
+extern int getQuadCenter();
 
 int check_error(void)
 {
@@ -49,6 +50,7 @@ int main(int argc, char **argv)
 static PyObject *
 lrs_startStream(PyObject *self, PyObject* args)
 {
+    
     import_array();//Starts numpy C-API
 
 
@@ -126,7 +128,7 @@ lrs_getFrame(PyObject *self, PyObject* args)
     }
     if(DEBUG_PRINT)  printf("Number of nonzero pixels in frame: %d\n", numNonZero);
 
-    float pointCloud[numNonZero][3];
+    float pointCloud[numNonZero][4];
     dCopy = depthPointer;
     //Generate point cloud
     int dx, dy;
@@ -138,6 +140,7 @@ lrs_getFrame(PyObject *self, PyObject* args)
 		  /* Retrieve the 16-bit depth value and map it into a depth in meters */
 		  uint16_t depth_value = dCopy[dy * depth_intrin.width + dx];
 		  float depth_in_meters = depth_value * depth_scale;
+		  pointCloud[index][0] = depth_in_meters;
 
 		  /* Skip over pixels with a depth value of zero, which is used to indicate no data */
 		  if (depth_value == 0) continue;
@@ -149,17 +152,19 @@ lrs_getFrame(PyObject *self, PyObject* args)
 		  
 		  
 		  //Patrick code: Subject to RUD
-		  for (int i = 0; i < 3; i++) {
+		  for (int i = 1; i < 4; i++) {
 			 pointCloud[index][i] = depth_point[i];
 		  }
 		  index++;
 	   }
     }
+    if(DEBUG_PRINT) printf("Size of vector: %d\n", getQuadCenter(pointCloud, numNonZero));
+
 
     if (DEBUG_PRINT)  printf("Populated frame\n");
 
 
-    int pcDims[2] = { numNonZero, 3 };
+    int pcDims[2] = { numNonZero, 4 };
     PyArrayObject* pointCloudNP = PyArray_SimpleNewFromData(2, pcDims, NPY_FLOAT32, (void*)&pointCloud);
     
     //Pack depth and color data into Numpy arrays
@@ -168,8 +173,8 @@ lrs_getFrame(PyObject *self, PyObject* args)
 
     int colorDims[3] = {depth_intrin.height, depth_intrin.width, 3};
     PyArrayObject* colorFrame = PyArray_SimpleNewFromData(3, colorDims, NPY_UINT8, (void*)colorPointer);
-    return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
-    //return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
+    //return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
+    return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
 }
 
 
