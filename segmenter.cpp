@@ -86,17 +86,51 @@ vector<vector<float> > readCloud(string fileName) {
 
     
 }
-vector<vector<vector<float> > > segmentCloudEfficient(vector<vector<float> > toSegment) {
-    //vector<vector<float> > notSeg = toSegment;
-    //vector<vector<vector<float> > > objList;
+vector<vector<vector<float> > >  segmentCloudEfficient(list<vector<float> > toSegment) {
+    list<vector<float> > notSeg = toSegment;
+    list<vector<float> >::iterator nsIt;
 
-    ////segment object
-    //list<vector<float> >inCloud;
-    //list<vector<float> >::iterator inIt;
+    vector<vector<vector<float> > > objList;
 
-    //sortDepth(notSeg);
-   
+    //segment object
+    
+
+    notSeg.sort(depthCmp());
+    
+    while (!notSeg.empty()) {
+	   vector<vector<float> >inCloud;
+	   vector<float> closestPoint = notSeg.front();
+	   inCloud.push_back(closestPoint);
+	   notSeg.pop_front();
+
+	   for (int i = 0; i < (int)inCloud.size(); i++) {//not at end of incloud
+
+		  vector<float> basePoint = inCloud.at(i);
+		  nsIt = notSeg.begin();
+
+		  while (true) {
+			 if (nsIt != notSeg.end()) {
+				vector <float> checkPoint = *nsIt;
+				if (checkPoint.at(0) - basePoint.at(0) > PT_DIST) break;
+				float distBet = distance(basePoint, checkPoint);
+				if (distBet < PT_DIST) {
+				    inCloud.push_back(checkPoint);
+				    nsIt = notSeg.erase(nsIt);
+				}
+				else nsIt++;
+
+			 }
+			 else break;
+		  }
+	   }
+	   objList.push_back(inCloud);
+    }
+    
+    
+    return objList;
+
 }
+
 
 
 vector<vector<vector<float> > > segmentCloud(vector<vector<float> > toSegment) {
@@ -217,18 +251,31 @@ int main(int argc, char **argv) {
     //writeCloudList(testCloud);
     
     //vector<vector<float> > testCloud = readCloud("cloud.txt");
-    vector<vector<float> > testCloud;
-    for (int i = 0; i < 600*2; i++) {
-	   vector<float> ta = { (float) i,(float) i,(float) i, (float) i };
-	   testCloud.push_back(ta);
-    }
+    //vector<vector<float> > testCloud;
+    //for (int i = 0; i < 600*2; i++) {
+	   //vector<float> ta = { (float) i,(float) i,(float) i, (float) i };
+	   //testCloud.push_back(ta);
+    //}
 
-    for (int i = 610*2; i < 1000*2; i++) {
+    //for (int i = 610*2; i < 1000*2; i++) {
+	   //vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+	   //testCloud.push_back(ta);
+    //}
+
+    list<vector<float> > testCloud;
+    for (int i = 0; i < 600 * 100; i++) {
 	   vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
 	   testCloud.push_back(ta);
     }
 
-    writeCloudList(segmentCloud(testCloud));
+    for (int i = 610 * 100; i < 1000 * 100; i++) {
+	   vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+	   testCloud.push_back(ta);
+    }
+
+    //list<vector<float> >  testCloud = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
+
+    writeCloudList(segmentCloudEfficient(testCloud));
 
     //float* cloudArray = testCloud.data();
     //writeCloud(testCloud);
