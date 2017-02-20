@@ -129,7 +129,7 @@ vector<vector<Point4* > >  segmentCloudEfficient(float toSegment[][4], int size)
 
     list<Point4* > notSeg;
     for (int i = 0; i < size; i++) {
-	   notSeg.push_back((Point4*) &(toSegment[i]));
+	   notSeg.push_back((Point4*) &(toSegment[i][0]));
     }
     
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
 
     //float  testcloud[5][4] = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
 
-    writeCloudList(segmentCloudEfficient(testCloud, numElements));
+    segmentCloudEfficient(testCloud, numElements);
 
   //  float testA[4] = { 1,2,3,4 };
 
