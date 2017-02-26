@@ -16,7 +16,17 @@ using std::string;
 using std::list;
 
 static const bool DEBUG_PRINT = true;
-static const float PT_DIST = 2.0*2.0; //Maximum allowed distance between points of object. Remember to square
+static const float MAX_DIST = .15*.15; //Maximum allowed distance between points of object. Remember to square
+static const float MIN_DEPTH = .01;//Throw away point if closer
+
+//Quad identification constants
+static const int MIN_QUAD_PTS = 500;//Minimum number of points for object to be considered a quad
+static const float MAX_QUAD_DEPTH = .5;//Maximum depth of quad in meters
+static const float MIN_QUAD_WIDTH = .1;
+static const float MAX_QUAD_WIDTH = .6;
+static const float MIN_QUAD_HEIGHT = .15;
+static const float MAX_QUAD_HEIGHT = .6;
+static const float SENTINEL_VALUE = -99; //Return if quad not found
 
 vector<int> foo;
 vector<vector<vector<float> > > segObjects;
@@ -53,49 +63,56 @@ float distance(Point4& v1, Point4& v2) {
 }
 
 void writeCloud(vector<Point4* > cloud, string name) {
+    //if (DEBUG_PRINT) printf("writeCloud running. 1st depth: %f\n", cloud.at(0)->depth);
     std::ofstream outputFile(name);
     std::ostream_iterator<float> output_iterator(outputFile, " ");
     BOOST_FOREACH(Point4* point, cloud){
-	   std::copy(&point->depth, &point->z, output_iterator);
+	   std::copy(&point->depth, (&point->z)+1, output_iterator);
 	   outputFile << "\n";
     }
     outputFile.close();
 }
 
 void writeCloudList(vector<vector<Point4* > > cloudList ){
+    
     int cloudNum = 0;
     BOOST_FOREACH(vector<Point4* > toWrite, cloudList) {
+	   
 	   writeCloud(toWrite, "./processed/proccloud"+std::to_string(cloudNum)+".txt");
 	   cloudNum++;
     }
 
 }
 
-vector<vector<float> > readCloud(string fileName) {
-    vector<vector<float> > cloud;
+class Float4 {
+public:
+    float data[4];
+};
+
+void readCloud(string fileName, vector<Float4  >& cloud) {
+    
     int rowNum = 0;
     std::ifstream inputFile(fileName);
-    while (true) {
+    while (!inputFile.eof()) {
 	   
-		  vector<float> tmpVec;
-		  float tmpFloat;
+	   Float4 tmpPt;
+	   float tmpFloat;
 
-			 for (int j = 0; j < 4; j++) {
-				inputFile >> tmpFloat;
-				if (DEBUG_PRINT) printf("data: %f\n", tmpFloat);
-				if (inputFile.eof()) return cloud;
-				tmpVec.push_back(tmpFloat);
-			 }
-			 cloud.push_back(tmpVec);
-			 if (DEBUG_PRINT) printf("Row Number: %d\n", ++rowNum);
+		  for (int j = 0; j < 4; j++) {
+			 inputFile >> tmpFloat;
+			 //if (DEBUG_PRINT) printf("data: %f\n", tmpFloat);
+			 //if (inputFile.eof()) return;
+			 tmpPt.data[j] = tmpFloat;
+		  }
+		  cloud.push_back(tmpPt);
+		 // if (DEBUG_PRINT) printf("Row Number: %d\n", ++rowNum);
     }
 
-    
 }
 
-vector<Point4*> generateObject(list<Point4*>& pointList) {
+void generateObject(list<Point4*>& pointList, vector<Point4* >& inCloud) {
     list<Point4* >::iterator nsIt;
-    vector<Point4* >inCloud;
+    
     Point4* closestPoint = pointList.front();
     inCloud.push_back(closestPoint);
     pointList.pop_front();
@@ -108,9 +125,9 @@ vector<Point4*> generateObject(list<Point4*>& pointList) {
 	   while (true) {
 		  if (nsIt != pointList.end()) {
 			 Point4& checkPoint = **nsIt;
-			 if (checkPoint.depth - basePoint.depth > PT_DIST) break;
+			 if (checkPoint.depth - basePoint.depth > MAX_DIST) break;
 			 float distBet = distance(basePoint, checkPoint);
-			 if (distBet < PT_DIST) {
+			 if (distBet < MAX_DIST) {
 				inCloud.push_back(&checkPoint);
 				nsIt = pointList.erase(nsIt);
 			 }
@@ -121,31 +138,90 @@ vector<Point4*> generateObject(list<Point4*>& pointList) {
 	   }
     }
 
-    return inCloud;
 }
 
 
-vector<vector<Point4* > >  segmentCloudEfficient(float toSegment[][4], int size) {
+void  segmentCloudEfficient(float toSegment[][4], int size, vector<vector<Point4* > >& objList) {
 
     list<Point4* > notSeg;
     for (int i = 0; i < size; i++) {
+	   if (toSegment[i][0] < MIN_DEPTH || std::isnan(toSegment[i][0])) continue;	 
 	   notSeg.push_back((Point4*) &(toSegment[i][0]));
     }
     
 
-    vector<vector<Point4* > > objList;
 
     notSeg.sort(depthCmp());
     
-    while (!notSeg.empty()) {	   
-	   objList.push_back(generateObject(notSeg));
+    
+    while (!notSeg.empty()) {
+	   vector<Point4* > solid;
+	   generateObject(notSeg, solid);
+	   objList.push_back(solid);
     }
-    
-    
-    return objList;
-
 }
 
+//returns box width and center of dim
+float* getObjectDims(vector<Point4* >& solid, int dim) {
+    float max= -100;//Explore min_value if necessary
+    float min = 100;
+    float ptSums = 0;
+    for (int i = 0; i < solid.size(); i++) {
+	   float pos;
+	   switch (dim) {
+		  case 0: 
+			 pos = solid.at(i)->x;
+			 break;
+		  case 1:
+			 pos = solid.at(i)->y;
+			 break;
+		  case 2:
+			 pos = solid.at(i)->z;
+			 break;
+		  default:
+			 break;
+	   }
+	   ptSums += pos;
+	   if (pos > max) max = pos;
+	   if (pos < min) min = pos;
+    }
+    
+    ptSums /= (float) solid.size();
+    //if (DEBUG_PRINT) printf("max: %f\n", max);
+    //if (DEBUG_PRINT) printf("min: %f\n", min);
+    float objDims[2] = { max - min, ptSums };
+    return objDims;
+}
+
+//Returns center of quad (for now list of quad objects)
+float* locateQuad(vector<vector<Point4* > >& objList) {
+    //vector<int> potentialQuads;
+    for (int i = 0; i < objList.size(); i++) {
+	   vector<Point4* >& toCheck = objList.at(i);
+	   if (toCheck.size() < MIN_QUAD_PTS) continue;
+	   if (toCheck.at(toCheck.size() - 1)->depth - toCheck.at(0)->depth > MAX_QUAD_DEPTH) continue;
+	   
+	   //get object width
+	   float* width = getObjectDims(toCheck, 0);
+	   if (DEBUG_PRINT) printf("width: %f\n", width);
+	   if (width[0]<MIN_QUAD_WIDTH || width[0]>MAX_QUAD_WIDTH) continue;
+
+
+	   float* height = getObjectDims(toCheck, 1);
+	   if (DEBUG_PRINT) printf("height: %f\n", height);
+	   if (height[0]<MIN_QUAD_HEIGHT || height[0]>MAX_QUAD_HEIGHT) continue;
+
+	   float location[2] = { width[1], height[1] };
+	   return location;
+	   //potentialQuads.push_back(i);
+
+    }
+
+    float noneFound[2] = { SENTINEL_VALUE,SENTINEL_VALUE };
+    return noneFound;
+
+    //return potentialQuads;
+}
 
 extern "C" {
 
@@ -154,40 +230,57 @@ extern "C" {
 	   return foo.at(0);
     }
 
+    float* segmentQuad(float toSegment[][4], int size ) {
 
+    }
     
 }
 
 const int numElements = 100000;
 float testCloud[numElements][4];
 
-int main(int argc, char **argv) {
-    
-    for (int i = 0; i < numElements/2; i++) {
-	  /* vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
-	   testCloud.push_back(ta);*/
-	   for (int j = 0; j < 4; j++) {
-		  testCloud[i][j] = (float)i;
-	   }
-    }
-
-    for (int i = (numElements / 2) + 10; i < numElements; i++) {
-	   /*vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
-	   testCloud.push_back(ta);*/
-	   for (int j = 0; j < 4; j++) {
-		  testCloud[i][j] = (float)i;
-	   }
-    }
-
-    //float  testcloud[5][4] = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
-
-    segmentCloudEfficient(testCloud, numElements);
-
-  //  float testA[4] = { 1,2,3,4 };
-
-
-   
-}
+//int main(int argc, char **argv) {
+//    if (DEBUG_PRINT) printf("main running\n");
+//
+//   // for (int i = 0; i < numElements/2; i++) {
+//	  ///* vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+//	  // testCloud.push_back(ta);*/
+//	  // for (int j = 0; j < 4; j++) {
+//		 // testCloud[i][j] = (float)i;
+//	  // }
+//   // }
+//
+//   // for (int i = (numElements / 2) + 10; i < numElements; i++) {
+//	  // /*vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+//	  // testCloud.push_back(ta);*/
+//	  // for (int j = 0; j < 4; j++) {
+//		 // testCloud[i][j] = (float)i;
+//	  // }
+//   // }
+//
+//    //float  testcloud[5][4] = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
+//
+//    typedef float float4[4];
+//    
+//    vector<Float4> ptVectors;
+//    readCloud("img.txt", ptVectors);
+//    float4* foo = (float4*) ptVectors.data();
+//
+//    vector<vector<Point4* > > segCloud;
+//    segmentCloudEfficient(foo, ptVectors.size(), segCloud);
+//    writeCloudList(segCloud);
+//    vector<int> quadIDs= locateQuad(segCloud);
+//
+//    BOOST_FOREACH(int ID, quadIDs) {
+//
+//	   if(DEBUG_PRINT) printf("Quad ID: %d\n", ID);
+//    }
+//    
+//  //  float testA[4] = { 1,2,3,4 };
+//
+//
+//   
+//}
 
 
 float*** convertToCVector(vector<vector<vector<float> > >&vals, int X, int Y, int Z)

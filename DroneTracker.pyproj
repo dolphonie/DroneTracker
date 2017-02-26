@@ -29,6 +29,7 @@
   <ItemGroup>
     <Content Include="lrsmodule.c" />
     <Content Include="pclmodule.cpp" />
+    <Content Include="segmenter.cpp" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>

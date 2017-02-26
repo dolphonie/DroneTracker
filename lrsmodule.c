@@ -5,7 +5,7 @@
 #include <librealsense/rs.h>
 #include <librealsense/rsutil.h>
 
-#define DEBUG_PRINT 1
+#define DEBUG_PRINT 0
 
 rs_context * ctx;
 rs_device * dev;
@@ -14,7 +14,7 @@ rs_error * e = 0;
 rs_intrinsics depth_intrin, color_intrin;
 rs_extrinsics depth_to_color;
 
-extern int getQuadCenter();
+//extern int getQuadCenter();
 
 int check_error(void)
 {
@@ -38,10 +38,10 @@ int check_error(void)
 
 void initlrs(void); /* Forward */
 
-int main(int argc, char **argv)
-{
-    
-}
+//int main(int argc, char **argv)
+//{
+//    
+//}
 
 /* A static module */
 
@@ -153,17 +153,17 @@ lrs_getFrame(PyObject *self, PyObject* args)
 		  
 		  //Patrick code: Subject to RUD
 		  for (int i = 1; i < 4; i++) {
-			 pointCloud[index][i] = depth_point[i];
+			 pointCloud[index][i] = depth_point[i-1];
 		  }
 		  index++;
 	   }
     }
-    if(DEBUG_PRINT) printf("Size of vector: %d\n", getQuadCenter(pointCloud, numNonZero));
+    
 
 
     if (DEBUG_PRINT)  printf("Populated frame\n");
 
-
+    //Depth x y z
     int pcDims[2] = { numNonZero, 4 };
     PyArrayObject* pointCloudNP = PyArray_SimpleNewFromData(2, pcDims, NPY_FLOAT32, (void*)&pointCloud);
     
@@ -173,8 +173,8 @@ lrs_getFrame(PyObject *self, PyObject* args)
 
     int colorDims[3] = {depth_intrin.height, depth_intrin.width, 3};
     PyArrayObject* colorFrame = PyArray_SimpleNewFromData(3, colorDims, NPY_UINT8, (void*)colorPointer);
-    //return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
-    return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
+    return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
+    //return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
 }
 
 
