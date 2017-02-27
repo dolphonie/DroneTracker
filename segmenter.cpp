@@ -191,9 +191,9 @@ void getObjectDims(vector<Point4* >& solid, int dim, float* objDims) {
 	   if (pos > max) max = pos;
 	   if (pos < min) min = pos;
     }
-    if(DEBUG_PRINT) printf("sum of points: %f\n" ,ptSums);
+    //if(DEBUG_PRINT) printf("sum of points: %f\n" ,ptSums);
     ptSums /= solid.size();
-    if (DEBUG_PRINT) printf("center: %f\n", ptSums);
+    //if (DEBUG_PRINT) printf("center: %f\n", ptSums);
     //if (DEBUG_PRINT) printf("max: %f\n", max);
     //if (DEBUG_PRINT) printf("min: %f\n", min);
     objDims[0] = max - min;
@@ -220,7 +220,7 @@ void locateQuad(float* xPtr, float* yPtr, float* zPtr, vector<vector<Point4* > >
 	   if (DEBUG_PRINT) printf("height: %f\n", height[0]);
 	   if (height[0]<MIN_QUAD_HEIGHT || height[0]>MAX_QUAD_HEIGHT) continue;
 
-	   if(DEBUG_PRINT) printf("quad loc: %f, %f", width[1], height[1]);
+	   //if(DEBUG_PRINT) printf("quad loc: %f, %f", width[1], height[1]);
 
 	   *zPtr = toCheck.at(i)->z;
 	   *xPtr = width[1];

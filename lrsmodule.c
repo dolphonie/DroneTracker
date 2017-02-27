@@ -177,18 +177,16 @@ lrs_getFrame(PyObject *self, PyObject* args)
 
     float xPos = 150;
     float yPos = 150;
-    float zPos = 150;
-
-    float quadPoint[3] = { xPos,yPos,zPos };
+    float zPos = 150;    
     
-   
-
     segmentQuad(pointCloud, numNonZero, &xPos, &yPos, &zPos);
 
+    
     //get pixel
+    float quadPoint[3] = { xPos,yPos,zPos };
     float colorPixel[2] = { -99,-99 };
     if (xPos != -99) {
-	   rs_project_point_to_pixel(colorPixel, &color_intrin, quadPoint);
+	   rs_project_point_to_pixel(colorPixel, &depth_intrin, quadPoint);
     }
 
     return Py_BuildValue("(O,O,O,f,f,f,i,i)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP),xPos,yPos,zPos, (int) colorPixel[0], (int) colorPixel[1]);

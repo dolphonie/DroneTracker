@@ -30,6 +30,7 @@ while True:
     if DEBUG_PRINT:
         print 'xPos: ' + str(comped[3])
         print 'yPos: ' + str(comped[4])
+        print 'zPos: ' + str(comped[5])
         print 'xPixel: ' + str(comped[6])
         print 'yPixel: ' + str(comped[7])
 
