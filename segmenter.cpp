@@ -143,7 +143,7 @@ void generateObject(list<Point4*>& pointList, vector<Point4* >& inCloud) {
 
 
 void  segmentCloudEfficient(float toSegment[][4], int size, vector<vector<Point4* > >& objList) {
-
+    
     list<Point4* > notSeg;
     for (int i = 0; i < size; i++) {
 	   if (toSegment[i][0] < MIN_DEPTH || std::isnan(toSegment[i][0])) continue;	
@@ -158,16 +158,17 @@ void  segmentCloudEfficient(float toSegment[][4], int size, vector<vector<Point4
 
     notSeg.sort(depthCmp());
     
-    
+    if (DEBUG_PRINT) printf("Generating objects\n");
     while (!notSeg.empty()) {
 	   vector<Point4* > solid;
 	   generateObject(notSeg, solid);
 	   objList.push_back(solid);
     }
+    if (DEBUG_PRINT) printf("Objects generated\n");
 }
 
 //returns box width and center of dim
-float* getObjectDims(vector<Point4* >& solid, int dim) {
+void getObjectDims(vector<Point4* >& solid, int dim, float* objDims) {
     float max= -100;//Explore min_value if necessary
     float min = 100;
     float ptSums = 0;
@@ -195,12 +196,12 @@ float* getObjectDims(vector<Point4* >& solid, int dim) {
     if (DEBUG_PRINT) printf("center: %f\n", ptSums);
     //if (DEBUG_PRINT) printf("max: %f\n", max);
     //if (DEBUG_PRINT) printf("min: %f\n", min);
-    float objDims[2] = { max - min, ptSums };
-    return objDims;
+    objDims[0] = max - min;
+    objDims[1] = ptSums;
 }
 
 //Returns center of quad (for now list of quad objects)
-void locateQuad(float* widthPtr, float* heightPtr, vector<vector<Point4* > >& objList) {
+void locateQuad(float* xPtr, float* yPtr, float* zPtr, vector<vector<Point4* > >& objList) {
     //vector<int> potentialQuads;
     for (int i = 0; i < objList.size(); i++) {
 	   vector<Point4* >& toCheck = objList.at(i);
@@ -208,25 +209,30 @@ void locateQuad(float* widthPtr, float* heightPtr, vector<vector<Point4* > >& ob
 	   if (toCheck.at(toCheck.size() - 1)->depth - toCheck.at(0)->depth > MAX_QUAD_DEPTH) continue;
 	   
 	   //get object width
-	   float* width = getObjectDims(toCheck, 0);
+	   float width[2];
+	   getObjectDims(toCheck, 0, width);
 	   if (DEBUG_PRINT) printf("width: %f\n", width[0]);
 	   if (width[0]<MIN_QUAD_WIDTH || width[0]>MAX_QUAD_WIDTH) continue;
 
 
-	   float* height = getObjectDims(toCheck, 1);
+	   float height[2];
+	   getObjectDims(toCheck, 1, height);
 	   if (DEBUG_PRINT) printf("height: %f\n", height[0]);
 	   if (height[0]<MIN_QUAD_HEIGHT || height[0]>MAX_QUAD_HEIGHT) continue;
 
 	   if(DEBUG_PRINT) printf("quad loc: %f, %f", width[1], height[1]);
-	   *widthPtr = width[1];
-	   *heightPtr = height[1];
+
+	   *zPtr = toCheck.at(i)->z;
+	   *xPtr = width[1];
+	   *yPtr = height[1];
 	   return;
 	   //potentialQuads.push_back(i);
 
     }
 
-    *widthPtr = NOT_FOUND_SENTINEL_VALUE;
-    *heightPtr = NOT_FOUND_SENTINEL_VALUE;
+    *xPtr = NOT_FOUND_SENTINEL_VALUE;
+    *yPtr = NOT_FOUND_SENTINEL_VALUE;
+    *zPtr = NOT_FOUND_SENTINEL_VALUE;
 
     //return potentialQuads;
 }
@@ -238,12 +244,14 @@ extern "C" {
 	   return foo.at(0);
     }
 
-    void segmentQuad(float toSegment[][4], int size, float*xLoc, float* yLoc ) {
+    void segmentQuad(float toSegment[][4], int size, float*xLoc, float* yLoc, float* zLoc ) {
 	   vector<vector<Point4* > > segCloud;
+	   if (DEBUG_PRINT) printf("cpp called\n");
 	   segmentCloudEfficient(toSegment, size, segCloud);
-	   if(DEBUG_PRINT) writeCloudList(segCloud);
-	   locateQuad(xLoc, yLoc, segCloud);
-
+	   if (DEBUG_PRINT) printf("cloud segmented\n");
+	   //if(DEBUG_PRINT) writeCloudList(segCloud);
+	   locateQuad(xLoc, yLoc, zLoc, segCloud);
+	   if (DEBUG_PRINT) printf("quad located\n");
     }
     
 }
@@ -252,37 +260,38 @@ const int numElements = 100000;
 float testCloud[numElements][4];
 
 int main(int argc, char **argv) {
-//
-//   // for (int i = 0; i < numElements/2; i++) {
-//	  ///* vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
-//	  // testCloud.push_back(ta);*/
-//	  // for (int j = 0; j < 4; j++) {
-//		 // testCloud[i][j] = (float)i;
-//	  // }
-//   // }
-//
-//   // for (int i = (numElements / 2) + 10; i < numElements; i++) {
-//	  // /*vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
-//	  // testCloud.push_back(ta);*/
-//	  // for (int j = 0; j < 4; j++) {
-//		 // testCloud[i][j] = (float)i;
-//	  // }
-//   // }
-//
-//    //float  testcloud[5][4] = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
-//
-//    typedef float float4[4];
-//    
-//    vector<Float4> ptVectors;
-//    readCloud("img.txt", ptVectors);
-//    float4* foo = (float4*) ptVectors.data();
-//
-//    float xPrint = 0;
-//    float yPrint = 0;
-//    segmentQuad(foo,ptVectors.size(), &xPrint,&yPrint);
-//    
-//    if (DEBUG_PRINT) printf("quad loc: %f, %f", xPrint, yPrint);  
-//}
+
+   // for (int i = 0; i < numElements/2; i++) {
+	  ///* vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+	  // testCloud.push_back(ta);*/
+	  // for (int j = 0; j < 4; j++) {
+		 // testCloud[i][j] = (float)i;
+	  // }
+   // }
+
+   // for (int i = (numElements / 2) + 10; i < numElements; i++) {
+	  // /*vector<float> ta = { (float)i,(float)i,(float)i, (float)i };
+	  // testCloud.push_back(ta);*/
+	  // for (int j = 0; j < 4; j++) {
+		 // testCloud[i][j] = (float)i;
+	  // }
+   // }
+
+    //float  testcloud[5][4] = {  { 99,99,99,99 },{ 999,999,999,999 }, { 5,5,5,5 }, { 6,6,6,6 },{ 7,7,7,7 } } ;
+
+    typedef float float4[4];
+    
+    vector<Float4> ptVectors;
+    readCloud("img.txt", ptVectors);
+    float4* foo = (float4*) ptVectors.data();
+
+    float xPrint = 0;
+    float yPrint = 0;
+    float zPrint = 0;
+    segmentQuad(foo,ptVectors.size(), &xPrint,&yPrint, &zPrint);
+    
+    if (DEBUG_PRINT) printf("quad loc: %f, %f", xPrint, yPrint);  
+}
 
 
 float*** convertToCVector(vector<vector<vector<float> > >&vals, int X, int Y, int Z)

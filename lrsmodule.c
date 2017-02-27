@@ -5,7 +5,8 @@
 #include <librealsense/rs.h>
 #include <librealsense/rsutil.h>
 
-#define DEBUG_PRINT 0
+#define DEBUG_PRINT 1
+
 
 rs_context * ctx;
 rs_device * dev;
@@ -14,7 +15,7 @@ rs_error * e = 0;
 rs_intrinsics depth_intrin, color_intrin;
 rs_extrinsics depth_to_color;
 
-//extern int getQuadCenter();
+extern void segmentQuad(float toSegment[][4], int size, float*xLoc, float* yLoc, float* zLoc);
 
 int check_error(void)
 {
@@ -173,7 +174,24 @@ lrs_getFrame(PyObject *self, PyObject* args)
 
     int colorDims[3] = {depth_intrin.height, depth_intrin.width, 3};
     PyArrayObject* colorFrame = PyArray_SimpleNewFromData(3, colorDims, NPY_UINT8, (void*)colorPointer);
-    return Py_BuildValue("(O,O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP));
+
+    float xPos = 150;
+    float yPos = 150;
+    float zPos = 150;
+
+    float quadPoint[3] = { xPos,yPos,zPos };
+    
+   
+
+    segmentQuad(pointCloud, numNonZero, &xPos, &yPos, &zPos);
+
+    //get pixel
+    float colorPixel[2] = { -99,-99 };
+    if (xPos != -99) {
+	   rs_project_point_to_pixel(colorPixel, &color_intrin, quadPoint);
+    }
+
+    return Py_BuildValue("(O,O,O,f,f,f,i,i)", PyArray_Return(depthFrame), PyArray_Return(colorFrame), PyArray_Return(pointCloudNP),xPos,yPos,zPos, (int) colorPixel[0], (int) colorPixel[1]);
     //return Py_BuildValue("(O,O)", PyArray_Return(depthFrame), PyArray_Return(colorFrame));
 }
 
