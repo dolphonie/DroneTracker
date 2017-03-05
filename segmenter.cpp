@@ -220,7 +220,7 @@ void locateQuad(float* xPtr, float* yPtr, float* zPtr, vector<vector<Point4* > >
 	   if (DEBUG_PRINT) printf("height: %f\n", height[0]);
 	   if (height[0]<MIN_QUAD_HEIGHT || height[0]>MAX_QUAD_HEIGHT) continue;
 
-	   //if(DEBUG_PRINT) printf("quad loc: %f, %f", width[1], height[1]);
+	   if(DEBUG_PRINT) printf("quad loc: %f, %f\n", width[1], height[1]);
 
 	   *zPtr = toCheck.at(i)->z;
 	   *xPtr = width[1];

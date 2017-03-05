@@ -24,6 +24,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="DroneTracker.py" />
+    <Compile Include="flyProg.py" />
+    <Compile Include="myVehicle.py" />
     <Compile Include="setup.py" />
   </ItemGroup>
   <ItemGroup>
